@@ -146,7 +146,7 @@ def read_generic(data, i, pc_bit, tag_name, encoding=None):
             return (tag_name, decoded_value), end_index
         except UnicodeDecodeError as e:
             print(f"Invalid {tag_name} string at index {end_index}. Returning as OctetString. Error was: {e}")
-    if RECURSIVE_OCTET_STRING:
+    if RECURSIVE_OCTET_STRING and tag_name == UNIVERSAL_TAGS[0x04][1]: # OctetString
         print(f"Attempting to parse {tag_name} value as ASN.1:")
         nested_items = parse_elements(data, i, end_index)
         return (tag_name, nested_items), end_index
