@@ -280,8 +280,7 @@ def parse_asn1(data, recursive_octet_string=False):
         i += 1
         length, i = read_length(data, i)
         if length != 0:
-            print(f"Warning: Expected length 0, got {length} at index {i} (skipping length bytes)")
-            i += length
+            print(f"Warning: Expected length 0, got {length} at index {i}. Ignoring length")
         return ("NULL", None), i
 
     def read_object_identifier(data, i):
