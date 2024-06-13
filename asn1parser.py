@@ -102,50 +102,55 @@ def parse_asn1(data, recursive_octet_string=False):
         print_tag(tag, tag_number, class_bits, pc_bit, i)
 
         if class_bits == 0:  # Universal
-            return parse_universal(tag_number, data, i)
+            return parse_universal(tag_number, pc_bit, data, i)
         elif class_bits == 1:  # Application
-            return read_generic(data, i, "Application ({tag_number})")
+            return read_generic(data, i, f"Application ({tag_number})")
         elif class_bits == 2:  # Context-specific
             return parse_context_specific(tag_number, pc_bit, data, i)
         elif class_bits == 3:  # Private
-            return read_generic(data, i, "Private ({tag_number})")
+            return read_generic(data, i, f"Private ({tag_number})")
 
-    def parse_universal(tag_number, data, i):
+    def parse_universal(tag_number, pc_bit, data, i):
         if tag_number == 0x01:  # BOOLEAN
             return read_boolean(data, i)
         elif tag_number == 0x02:  # INTEGER
             return read_integer(data, i)
         elif tag_number == 0x03:  # BIT STRING
-            return read_string(data, i, "BitString")
+            if pc_bit:  # Constructed
+                return read_constructed(data, i, "BitString")
+            else:
+                return read_string(data, i, "BitString")
         elif tag_number == 0x04:  # OCTET STRING
-            return read_octet_string(data, i)
+            if pc_bit:  # Constructed
+                return read_constructed(data, i, "OctetString")
+            else:
+                return read_octet_string(data, i)
         elif tag_number == 0x05:  # NULL
             return read_null(data, i)
         elif tag_number == 0x06:  # OBJECT IDENTIFIER
-            # return read_generic(data, i, "ObjectIdentifier")
             return read_object_identifier(data, i)
         elif tag_number == 0x07:  # ObjectDescriptor
-            return read_generic(data, i, "ObjectDescriptor")
+            return read_constructed(data, i, "ObjectDescriptor")
         elif tag_number == 0x08:  # EXTERNAL
-            return read_external(data, i)
+            return read_constructed(data, i, "External")
         elif tag_number == 0x09:  # REAL
-            return read_generic(data, i, "Real")
+            return read_constructed(data, i, "Real")
         elif tag_number == 0x0A:  # ENUMERATED
             return read_integer(data, i)
         elif tag_number == 0x0B:  # EMBEDDED PDV
-            return read_embedded_pdv(data, i)
+            return read_constructed(data, i, "Embedded PDV")
         elif tag_number == 0x0C:  # UTF8String
             return read_string(data, i, "Utf8String", 'utf-8')
         elif tag_number == 0x10:  # SEQUENCE and SEQUENCE OF
-            return read_sequence(data, i)
+            return read_constructed(data, i, "Sequence")
         elif tag_number == 0x11:  # SET and SET OF
-            return read_set(data, i)
+            return read_constructed(data, i, "Set")
         elif tag_number == 0x12:  # NumericString
             return read_string(data, i, "NumericString", 'ascii')
         elif tag_number == 0x13:  # PrintableString
             return read_string(data, i, "PrintableString", 'ascii')
         elif tag_number == 0x14:  # TIME
-            return read_generic(data, i, "Time")
+            return read_constructed(data, i, "Time")
         elif tag_number == 0x16:  # IA5String
             return read_string(data, i, "IA5String", 'ascii')
         elif tag_number == 0x17:  # UTCTime
@@ -161,17 +166,17 @@ def parse_asn1(data, recursive_octet_string=False):
         elif tag_number == 0x1C:  # UniversalString
             return read_string(data, i, "UniversalString", 'utf-32-be')
         elif tag_number == 0x1D:  # CHARACTER STRING
-            return read_generic(data, i, "CharacterString")
+            return read_constructed(data, i, "CharacterString")
         elif tag_number == 0x1E:  # BMPString
             return read_string(data, i, "BMPString", 'utf-16-be')
         elif tag_number == 0x1F:  # DATE
-            return read_generic(data, i, "Date")
+            return read_constructed(data, i, "Date")
         elif tag_number == 0x20:  # TIME-OF-DAY
-            return read_generic(data, i, "TimeOfDay")
+            return read_constructed(data, i, "TimeOfDay")
         elif tag_number == 0x21:  # DATE-TIME
-            return read_generic(data, i, "DateTime")
+            return read_constructed(data, i, "DateTime")
         elif tag_number == 0x22:  # DURATION
-            return read_generic(data, i, "Duration")
+            return read_constructed(data, i, "Duration")
         elif tag_number == 0x23:  # TeletexString, T61String
             return read_string(data, i, "TeletexString", 'ascii')
         elif tag_number == 0x24:  # VideotexString
@@ -185,11 +190,11 @@ def parse_asn1(data, recursive_octet_string=False):
         elif tag_number == 0x28:  # UniversalString
             return read_string(data, i, "UniversalString", 'utf-32-be')
         elif tag_number == 0x29:  # CHARACTER STRING
-            return read_generic(data, i, "CharacterString")
+            return read_constructed(data, i, "CharacterString")
         elif tag_number == 0x2A:  # RELATIVE-OID
-            return read_generic(data, i, "RelativeOID")
+            return read_constructed(data, i, "RelativeOID")
         elif tag_number == 0x80:  # CHOICE (constructed context-specific tag)
-            return read_choice(data, i)
+            return read_constructed(data, i, "CHOICE")
         else:
             print(f"Unexpected universal tag number: 0x{tag_number:02x} at index {i} (skipping)")
             return None, i + 1  # Skip invalid byte and continue
@@ -254,6 +259,22 @@ def parse_asn1(data, recursive_octet_string=False):
             return (tag_name, nested_items), new_i
         return (tag_name, value), new_i
 
+    def read_constructed(data, i, tag_name):
+        print(f"{tag_name} (Constructed) tag")
+        i += 1
+        length, i = read_length(data, i)
+        end_index = i + length
+        if end_index > len(data):
+            print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
+            end_index = len(data)
+        items = []
+        while i < end_index:
+            item, new_i = parse_element(data, i)
+            if item is not None:
+                items.append(item)
+            i = new_i
+        return (tag_name, items), i
+
     def read_null(data, i):
         print("NULL tag")
         i += 1
@@ -262,61 +283,6 @@ def parse_asn1(data, recursive_octet_string=False):
             print(f"Warning: Expected length 0, got {length} at index {i} (skipping length bytes)")
             i += length
         return ("NULL", None), i
-
-    def read_sequence(data, i):
-        print("SEQUENCE tag")
-        i += 1
-        length, i = read_length(data, i)
-        print_data("SEQUENCE content", data, i, length)
-        end = i + length
-        items = []
-        while i < end:
-            item, new_i = parse_element(data, i)
-            if item is not None:
-                items.append(item)
-            i = new_i
-        return ("SEQUENCE", items), i
-
-    def read_set(data, i):
-        print("SET tag")
-        i += 1
-        length, i = read_length(data, i)
-        print_data("SET content", data, i, length)
-        end = i + length
-        items = []
-        while i < end:
-            item, new_i = parse_element(data, i)
-            if item is not None:
-                items.append(item)
-            i = new_i
-        return ("SET", items), i
-
-    def read_choice(data, i):
-        print("CHOICE tag")
-        i += 1
-        length, i = read_length(data, i)
-        print_data("CHOICE value", data, i, length)
-        value = data[i:i + length]
-        i += length
-        return ("CHOICE", value), i
-
-    def read_embedded_pdv(data, i):
-        print("EMBEDDED PDV tag")
-        i += 1
-        length, i = read_length(data, i)
-        print_data("EMBEDDED PDV value", data, i, length)
-        value = data[i:i + length]
-        i += length
-        return ("EMBEDDED PDV", value), i
-
-    def read_external(data, i):
-        print("EXTERNAL tag")
-        i += 1
-        length, i = read_length(data, i)
-        print_data("EXTERNAL value", data, i, length)
-        value = data[i:i + length]
-        i += length
-        return ("EXTERNAL", value), i
 
     def read_object_identifier(data, i):
         def get_human_readable_oid(oid):
