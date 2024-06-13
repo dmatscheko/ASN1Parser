@@ -90,7 +90,7 @@ def print_data(description, data, index=0, length=None):
 def print_tag(tag, tag_number, class_bits, pc_bit, index):
     class_str = ["Universal", "Application", "Context-specific", "Private"][class_bits]
     form_str = ["Primitive", "Constructed"][pc_bit]
-    print(f"\nTag 0x{tag:02x} at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
+    print(f"\n0x{tag:02x} at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
 
 # Length reader
 
@@ -331,10 +331,10 @@ def parse_asn1(data):
 def print_asn1_structure(items, indent=0):
     for idx, item in enumerate(items):
         if isinstance(item[1], list):
-            print(" " * indent + f"Item {idx}: {item[0]}")
+            print(" " * indent + f"[{idx}] {item[0]}")
             print_asn1_structure(item[1], indent + 2)
         else:
-            print(" " * indent + f"Item {idx}: {item[0]} - {item[1]}")
+            print(" " * indent + f"[{idx}] {item[0]}: {item[1]}")
 
 # Main script
 
