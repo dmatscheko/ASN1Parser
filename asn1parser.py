@@ -338,7 +338,7 @@ def print_asn1_structure(items, indent=0):
 
 # Main script
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Parse ASN.1 file or content and optionally base64 decode the content.')
     parser.add_argument('-f', '--file_path', type=str, help='Path to the ASN.1 file.')
     parser.add_argument('-c', '--content', type=str, help='ASN.1 content directly as a string.')
@@ -347,14 +347,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.file_path is None and args.content is None:
+    if not args.file_path and not args.content:
         parser.error('No action requested, add --file_path or --content')
 
-    if args.content:
-        file_content = args.content.encode()
-    else:
-        with open(args.file_path, 'rb') as f:
-            file_content = f.read()
+    file_content = args.content.encode() if args.content else open(args.file_path, 'rb').read()
 
     if args.strip_headers:
         # Remove all headers and footers like -----BEGIN CERTIFICATE-----
@@ -363,10 +359,7 @@ if __name__ == "__main__":
         # Remove any remaining whitespace or newlines
         file_content = re.sub(b"\s+", b"", file_content)
 
-    if args.base64:
-        decoded_data = base64.b64decode(file_content)
-    else:
-        decoded_data = file_content
+    decoded_data = base64.b64decode(file_content) if args.base64 else file_content
 
     # Parse the ASN.1 structure
     asn1_items = parse_asn1(decoded_data)
@@ -375,3 +368,6 @@ if __name__ == "__main__":
         print_asn1_structure(asn1_items)
     else:
         print("\nFailed to parse ASN.1 structure.")
+
+if __name__ == "__main__":
+    main()
