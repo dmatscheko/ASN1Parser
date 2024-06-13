@@ -61,6 +61,7 @@ OID_NAMES = {
     '2.5.4.46': 'DN Qualifier',
     '2.5.4.65': 'Pseudonym',
     '2.5.29.17': 'Subject Alternative Name (SAN)',
+    '2.5.29.19': 'Basic Constraints (basicConstraints)',
     '2.16.840.1.113730.1.1': 'Netscape Cert Type',
     '2.16.840.1.113730.1.2': 'Netscape Base URL',
     '2.16.840.1.113730.1.3': 'Netscape Revocation URL',
@@ -105,7 +106,7 @@ def parse_asn1(data, recursive_octet_string=False):
         elif class_bits == 1:  # Application
             return read_generic(data, i, "Application ({tag_number})")
         elif class_bits == 2:  # Context-specific
-            return read_generic(data, i, f"Context-specific ({tag_number})")
+            return parse_context_specific(tag_number, pc_bit, data, i)
         elif class_bits == 3:  # Private
             return read_generic(data, i, "Private ({tag_number})")
 
@@ -340,6 +341,28 @@ def parse_asn1(data, recursive_octet_string=False):
             return (tag_name, oid), new_i
         else:
             return (tag_name, f"{oid} ({human_readable_oid})"), new_i
+
+    def parse_context_specific(tag_number, pc_bit, data, i):
+        print(f"Context-specific tag {tag_number}")
+        i += 1
+        length, i = read_length(data, i)
+        end_index = i + length
+        if end_index > len(data):
+            print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
+            end_index = len(data)
+        if pc_bit:  # Constructed
+            items = []
+            while i < end_index:
+                item, new_i = parse_element(data, i)
+                if item is not None:
+                    items.append(item)
+                i = new_i
+            return (f"Context-specific ({tag_number})", items), i
+        else:  # Primitive
+            print_data(f"Context-specific ({tag_number}) value", data, i, length)
+            value = data[i:end_index]
+            i += length
+            return (f"Context-specific ({tag_number})", value), i
 
     # Handle data
     print_data("Initial data", data, 0, 16)
