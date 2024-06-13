@@ -200,45 +200,45 @@ def read_constructed(data, i, pc_bit, tag_name, encoding=None):
     return (tag_name, items), i
 
 UNIVERSAL_TAGS = {
-    0x01: (read_boolean, "Boolean"),  # BOOLEAN
-    0x02: (read_integer, "Integer"),  # INTEGER
-    0x03: (read_generic, "BitString"),  # BIT STRING
-    0x04: (read_generic, "OctetString"),  # OCTET STRING
-    0x05: (read_null, "NULL"),  # NULL
-    0x06: (read_object_identifier, "ObjectIdentifier"),  # OBJECT IDENTIFIER
-    0x07: (read_constructed, "ObjectDescriptor"),  # ObjectDescriptor
-    0x08: (read_constructed, "External"),  # EXTERNAL
-    0x09: (read_constructed, "Real"),  # REAL
-    0x0A: (read_integer, "Enumerated"),  # ENUMERATED
-    0x0B: (read_constructed, "EmbeddedPDV"),  # EMBEDDED PDV
-    0x0C: (read_generic, "UTF8String", 'utf-8'),  # UTF8String
-    0x10: (read_constructed, "Sequence"),  # SEQUENCE and SEQUENCE OF
-    0x11: (read_constructed, "Set"),  # SET and SET OF
-    0x12: (read_generic, "NumericString", 'ascii'),  # NumericString
-    0x13: (read_generic, "PrintableString", 'ascii'),  # PrintableString
-    0x14: (read_generic, "T61String", 'ascii'),  # T61String
-    0x15: (read_generic, "VideotexString", 'ascii'),  # VideotexString
-    0x16: (read_generic, "IA5String", 'ascii'),  # IA5String
-    0x17: (read_generic, "UTCTime", 'ascii'),  # UTCTime
-    0x18: (read_generic, "GeneralizedTime", 'ascii'),  # GeneralizedTime
-    0x19: (read_generic, "GraphicString", 'ascii'),  # GraphicString
-    0x1A: (read_generic, "VisibleString", 'ascii'),  # VisibleString
-    0x1B: (read_generic, "GeneralString", 'ascii'),  # GeneralString
-    0x1C: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
-    0x1D: (read_generic, "CharacterString", 'ascii'),  # CHARACTER STRING
-    0x1E: (read_generic, "BMPString", 'utf-16-be'),  # BMPString
-    0x1F: (read_constructed, "Date"),  # DATE
-    0x20: (read_constructed, "TimeOfDay"),  # TIME-OF-DAY
-    0x21: (read_constructed, "DateTime"),  # DATE-TIME
-    0x22: (read_constructed, "Duration"),  # DURATION
-    0x23: (read_generic, "TeletexString", 'ascii'),  # TeletexString
-    0x24: (read_generic, "VideotexString", 'ascii'),  # VideotexString
-    0x25: (read_generic, "GraphicString", 'ascii'),  # GraphicString
-    0x26: (read_generic, "VisibleString", 'ascii'),  # VisibleString
-    0x27: (read_generic, "GeneralString", 'ascii'),  # GeneralString
-    0x28: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
-    0x29: (read_constructed, "CharacterString"),  # CHARACTER STRING
-    0x2A: (read_constructed, "RelativeOID"),  # RELATIVE-OID
+    0x01: (read_boolean, "Boolean"),
+    0x02: (read_integer, "Integer"),
+    0x03: (read_generic, "BitString"),
+    0x04: (read_generic, "OctetString"),
+    0x05: (read_null, "NULL"),
+    0x06: (read_object_identifier, "ObjectIdentifier"),
+    0x07: (read_constructed, "ObjectDescriptor"),
+    0x08: (read_constructed, "External"),
+    0x09: (read_constructed, "Real"),
+    0x0A: (read_integer, "Enumerated"),
+    0x0B: (read_constructed, "EmbeddedPDV"),
+    0x0C: (read_generic, "UTF8String", 'utf-8'),
+    0x10: (read_constructed, "Sequence"),
+    0x11: (read_constructed, "Set"),
+    0x12: (read_generic, "NumericString", 'ascii'),
+    0x13: (read_generic, "PrintableString", 'ascii'),
+    0x14: (read_generic, "T61String", 'ascii'),
+    0x15: (read_generic, "VideotexString", 'ascii'),
+    0x16: (read_generic, "IA5String", 'ascii'),
+    0x17: (read_generic, "UTCTime", 'ascii'),
+    0x18: (read_generic, "GeneralizedTime", 'ascii'),
+    0x19: (read_generic, "GraphicString", 'ascii'),
+    0x1A: (read_generic, "VisibleString", 'ascii'),
+    0x1B: (read_generic, "GeneralString", 'ascii'),
+    0x1C: (read_generic, "UniversalString", 'utf-32-be'),
+    0x1D: (read_generic, "CharacterString", 'ascii'),
+    0x1E: (read_generic, "BMPString", 'utf-16-be'),
+    0x1F: (read_constructed, "Date"),
+    0x20: (read_constructed, "TimeOfDay"),
+    0x21: (read_constructed, "DateTime"),
+    0x22: (read_constructed, "Duration"),
+    0x23: (read_generic, "TeletexString", 'ascii'),
+    0x24: (read_generic, "VideotexString", 'ascii'),
+    0x25: (read_generic, "GraphicString", 'ascii'),
+    0x26: (read_generic, "VisibleString", 'ascii'),
+    0x27: (read_generic, "GeneralString", 'ascii'),
+    0x28: (read_generic, "UniversalString", 'utf-32-be'),
+    0x29: (read_constructed, "CharacterString"),
+    0x2A: (read_constructed, "RelativeOID"),
 }
 
 def read_universal(data, i, pc_bit, tag_number):
@@ -262,9 +262,9 @@ X509_CONTEXT_SPECIFIC_NAMES = {
     4: "Validity",
     5: "Subject",
     6: "Subject Public Key Info",
-    7: "Issuer Unique ID",  # Optional
-    8: "Subject Unique ID",  # Optional
-    9: "Extensions",  # Optional
+    7: "Issuer Unique ID",
+    8: "Subject Unique ID",
+    9: "Extensions",
 }
 
 def read_context_specific(data, i, pc_bit, tag_number):
