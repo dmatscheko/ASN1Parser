@@ -79,6 +79,8 @@ OID_REPLACEMENTS = {
     '85': '2.5',
 }
 
+# Printing helpers
+
 def print_data(description, data, index, length=None):
     hex_chunk = ' '.join(f'{b:02x}' for b in data[index:index + (length or 1)])
     ascii_chunk = ''.join(chr(b) if 32 <= b <= 127 else '.' for b in data[index:index + (length or 1)])
@@ -90,6 +92,8 @@ def print_tag(tag, tag_number, class_bits, pc_bit, index):
     tag_info = UNIVERSAL_TAGS.get(tag_number, ("Unknown", f"Unknown ({tag_number})"))
     tag_name = tag_info[1]
     print(f"\nTag 0x{tag:02x} ({tag_name}) at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
+
+# Length reader
 
 def read_length(data, i):
     if i >= len(data):
@@ -110,6 +114,8 @@ def read_length(data, i):
             i += 1
     print(f"  Length: {length}")
     return length, i
+
+# Universal tag readers
 
 def read_generic(data, i, pc_bit, tag_name, encoding=None):
     print(f"{tag_name} tag")
@@ -149,7 +155,7 @@ def read_null(data, i, pc_bit, tag_name, encoding=None):
     i += 1
     length, i = read_length(data, i)
     if length != 0:
-        print(f"Expected length 0, got {length} at index {i}. Ignoring length")
+        print(f"Expected length 0, got {length} at index {i}. Ignoring length.")
     return ("NULL", None), i
 
 def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
@@ -186,7 +192,7 @@ def read_constructed(data, i, pc_bit, tag_name, encoding=None):
         end_index = len(data)
     items = []
     while i < end_index:
-        item, new_i = parse_element(data, i)
+        item, new_i = read_element(data, i)
         if item:
             items.append(item)
         i = new_i
@@ -234,7 +240,7 @@ UNIVERSAL_TAGS = {
     0x2A: (read_constructed, "RelativeOID"),  # RELATIVE-OID
 }
 
-def parse_universal(tag_number, pc_bit, data, i):
+def read_universal(data, i, pc_bit, tag_number):
     if tag_number in UNIVERSAL_TAGS:
         tag_info = UNIVERSAL_TAGS[tag_number]
         read_function = tag_info[0]
@@ -242,11 +248,12 @@ def parse_universal(tag_number, pc_bit, data, i):
         encoding = tag_info[2] if len(tag_info) > 2 else None
         return read_function(data, i, pc_bit, tag_name, encoding)
     else:
-        # Handle unknown tag numbers
-        print(f"Unknown universal tag number: 0x{tag_number:02x} at index {i}. Reading as generic")
+        print(f"\nUnknown universal tag number: 0x{tag_number:02x} at index {i}. Reading as generic.")
         return read_generic(data, i, pc_bit, f"Unknown ({tag_number})")
 
-def parse_context_specific(tag_number, pc_bit, data, i):
+# Context-specific tag reader
+
+def read_context_specific(data, i, pc_bit, tag_number):
     print(f"Context-specific tag {tag_number}")
     i += 1
     length, i = read_length(data, i)
@@ -257,7 +264,7 @@ def parse_context_specific(tag_number, pc_bit, data, i):
     if pc_bit:  # Constructed
         items = []
         while i < end_index:
-            item, new_i = parse_element(data, i)
+            item, new_i = read_element(data, i)
             if item:
                 items.append(item)
             i = new_i
@@ -266,7 +273,9 @@ def parse_context_specific(tag_number, pc_bit, data, i):
         print_data(f"Context-specific ({tag_number}) value", data, i, length)
         return (f"Context-specific ({tag_number})", data[i:end_index]), end_index
 
-def parse_element(data, i):
+# Main parsing functions
+
+def read_element(data, i):
     tag = data[i]
     class_bits = (tag >> 6) & 0x03
     pc_bit = (tag >> 5) & 0x01
@@ -275,11 +284,11 @@ def parse_element(data, i):
     print_tag(tag, tag_number, class_bits, pc_bit, i)
 
     if class_bits == 0:  # Universal
-        return parse_universal(tag_number, pc_bit, data, i)
+        return read_universal(data, i, pc_bit, tag_number)
     elif class_bits == 1:  # Application
         return read_generic(data, i, pc_bit, f"Application ({tag_number})")
     elif class_bits == 2:  # Context-specific
-        return parse_context_specific(tag_number, pc_bit, data, i)
+        return read_context_specific(data, i, pc_bit, tag_number)
     elif class_bits == 3:  # Private
         return read_generic(data, i, pc_bit, f"Private ({tag_number})")
 
@@ -288,11 +297,13 @@ def parse_asn1(data):
     items = []
     i = 0
     while i < len(data):
-        item, new_i = parse_element(data, i)
+        item, new_i = read_element(data, i)
         if item:
             items.append(item)
         i = new_i
     return items
+
+# Print result
 
 def print_asn1_structure(items, indent=0):
     for idx, item in enumerate(items):
@@ -302,7 +313,8 @@ def print_asn1_structure(items, indent=0):
         else:
             print(" " * indent + f"Item {idx}: {item[0]} - {item[1]}")
 
-# Load the data and parse it
+# Main script
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Parse ASN.1 file or content and optionally base64 decode the content.')
     parser.add_argument('-f', '--file_path', type=str, help='Path to the ASN.1 file.')
@@ -331,4 +343,4 @@ if __name__ == "__main__":
         print("\nParsed ASN.1 structure:")
         print_asn1_structure(asn1_items)
     else:
-        print("\nFailed to parse ASN.1 structure")
+        print("\nFailed to parse ASN.1 structure.")
