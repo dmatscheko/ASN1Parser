@@ -254,8 +254,23 @@ def read_universal(data, i, pc_bit, tag_number):
 
 # Context-specific tag reader
 
+X509_CONTEXT_SPECIFIC_NAMES = {
+    0: "Version",
+    1: "Serial Number",
+    2: "Signature Algorithm",
+    3: "Issuer",
+    4: "Validity",
+    5: "Subject",
+    6: "Subject Public Key Info",
+    7: "Issuer Unique ID",  # Optional
+    8: "Subject Unique ID",  # Optional
+    9: "Extensions",  # Optional
+}
+
 def read_context_specific(data, i, pc_bit, tag_number):
-    print(f"Context-specific tag {tag_number}")
+    tag_name = X509_CONTEXT_SPECIFIC_NAMES.get(tag_number, tag_number)
+    tag_name = f"Context-specific ({tag_name})"
+    print(f"{tag_name}")
     i += 1
     length, i = read_length(data, i)
     end_index = i + length
@@ -269,10 +284,10 @@ def read_context_specific(data, i, pc_bit, tag_number):
             if item:
                 items.append(item)
             i = new_i
-        return (f"Context-specific ({tag_number})", items), i
+        return (tag_name, items), i
     else:  # Primitive
-        print_data(f"Context-specific ({tag_number}) value", data, i, length)
-        return (f"Context-specific ({tag_number})", data[i:end_index]), end_index
+        print_data(f"{tag_name} value", data, i, length)
+        return (tag_name, data[i:end_index]), end_index
 
 # Main parsing functions
 

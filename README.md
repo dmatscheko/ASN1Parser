@@ -6,7 +6,6 @@ This Python script decodes (possibly broken) ASN.1 (Abstract Syntax Notation One
 - Parses ASN.1 encoded data from a file or directly from a string.
 - Optionally base64 decodes the input data.
 - Supports recursive parsing of nested ASN.1 structures.
-- Can recursively parse `OCTET STRING` contents as ASN.1 if specified.
 - Outputs the parsed ASN.1 structure in a formatted and readable way.
 
 ## Usage
@@ -16,7 +15,7 @@ This Python script decodes (possibly broken) ASN.1 (Abstract Syntax Notation One
 - `-f`, `--file_path`: Path to the ASN.1 file.
 - `-c`, `--content`: ASN.1 content directly as a string.
 - `-b`, `--base64`: Base64 decode the content before parsing.
-- `-r`, `--recursive_octet_string`: Recursively parse `OCTET STRING` content as ASN.1.
+- `-s`, `--strip-headers`: Remove headers and footers like -----BEGIN CERTIFICATE-----.
 
 ### Examples
 
@@ -50,29 +49,20 @@ The parsed ASN.1 structure will be printed in a formatted and indented manner, m
 
 ```
 Parsed ASN.1 structure:
-Item 0: SEQUENCE
-  Item 0: INTEGER - 12345
-  Item 1: OCTET STRING
-    Item 0: SEQUENCE
-      Item 0: UTF8String - Example
-      Item 1: INTEGER - 67890
+Item 0: Sequence
+  Item 0: Sequence
+    Item 0: Context-specific (Version)
+      Item 0: Integer - 2
+    Item 1: Integer - 123456789
+    Item 2: Sequence
+      Item 0: ObjectIdentifier - 42.134.72.134.247.13.1.1.11 (SHA-256 with RSA Signature (SHA256 RSA SIG))
+      Item 1: NULL - None
+    Item 3: Sequence
+      Item 0: Set
+        Item 0: Sequence
+          Item 0: ObjectIdentifier - 85.4.6 (Country Name (C))
+          [...]
 ```
-
-## Functions
-
-### `parse_asn1(data, recursive_octet_string=False)`
-
-Parses the provided ASN.1 data.
-
-- `data`: The ASN.1 encoded data as bytes.
-- `recursive_octet_string`: If `True`, recursively parse `OCTET STRING` content as ASN.1.
-
-### `print_asn1_structure(items, indent=0)`
-
-Prints the parsed ASN.1 structure in a formatted manner.
-
-- `items`: The parsed ASN.1 items.
-- `indent`: The current indentation level (used for recursive calls).
 
 ## License
 
