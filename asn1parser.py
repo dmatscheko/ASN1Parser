@@ -82,7 +82,7 @@ OID_REPLACEMENTS = {
 
 # Printing helpers
 
-def print_data(description, data, index, length=None):
+def print_data(description, data, index=0, length=None):
     hex_chunk = ' '.join(f'{b:02x}' for b in data[index:index + (length or 1)])
     ascii_chunk = ''.join(chr(b) if 32 <= b <= 127 else '.' for b in data[index:index + (length or 1)])
     print(f"{description} at index {index}: [0x] {hex_chunk} ({ascii_chunk})")
@@ -90,9 +90,7 @@ def print_data(description, data, index, length=None):
 def print_tag(tag, tag_number, class_bits, pc_bit, index):
     class_str = ["Universal", "Application", "Context-specific", "Private"][class_bits]
     form_str = ["Primitive", "Constructed"][pc_bit]
-    tag_info = UNIVERSAL_TAGS.get(tag_number, ("Unknown", f"Unknown ({tag_number})"))
-    tag_name = tag_info[1]
-    print(f"\nTag 0x{tag:02x} ({tag_name}) at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
+    print(f"\nTag 0x{tag:02x} at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
 
 # Length reader
 
@@ -101,7 +99,7 @@ def read_length(data, i):
         print(f"\nReached end of data while reading length at index {i}.")
         return 0, i + 1
     length = data[i]
-    print_data("Length byte", data, i)
+    print_data("  Length byte", data, i)
     i += 1
     if length & 0x80:  # Long form
         num_bytes = length & 0x7F
@@ -109,11 +107,11 @@ def read_length(data, i):
         if i + num_bytes > len(data):
             print(f"\nReached end of data while reading long form length at index {i}.")
             return 0, i + num_bytes
-        print_data(f"  Long form length ({num_bytes} bytes)", data, i, num_bytes)
+        print_data(f"    Long form length ({num_bytes} bytes)", data, i, num_bytes)
         for _ in range(num_bytes):
             length = (length << 8) | data[i]
             i += 1
-    print(f"  Length: {length}")
+    print(f"    Length: {length}")
     return length, i
 
 # Universal tag readers
@@ -126,38 +124,41 @@ def read_generic(data, i, pc_bit, tag_name, encoding=None):
     if end_index > len(data):
         print(f"\nReached end of data while reading {tag_name} tag value at index {i}. Returning available data.")
         end_index = len(data)
-    print_data(f"{tag_name} value", data, i, length)
     value = data[i:end_index]
-    i += length
+    print_data(f"  Value:", data, i, length)
+    
     if pc_bit:
         print(f"Parsing {tag_name} value as ASN.1:")
-        nested_items = parse_asn1(value)
-        return (tag_name, nested_items), i
+        nested_items = parse_elements(data, i, end_index)
+        return (tag_name, nested_items), end_index
     if encoding:
         try:
             decoded_value = value.decode(encoding)
-            return (tag_name, decoded_value), i
+            print(f"  Decoded value: {decoded_value}")
+            return (tag_name, decoded_value), end_index
         except UnicodeDecodeError as e:
-            print(f"Invalid {tag_name} string at index {i}. Returning as OctetString: {e}")
-    return (tag_name, value), i
+            print(f"Invalid {tag_name} string at index {end_index}. Returning as OctetString. Error was: {e}")
+    return (tag_name, value), end_index
 
 def read_boolean(data, i, pc_bit, tag_name, encoding=None):
     (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
     value = value[0] != 0 if value else None
+    print(f"  Decoded value: {value}")
     return (tag_name, value), new_i
 
 def read_integer(data, i, pc_bit, tag_name, encoding=None):
     (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
     value = int.from_bytes(value, byteorder='big', signed=True) if value else None
+    print(f"  Decoded value: {value}")
     return (tag_name, value), new_i
 
 def read_null(data, i, pc_bit, tag_name, encoding=None):
-    print("NULL tag")
+    print(f"{tag_name} tag")
     i += 1
     length, i = read_length(data, i)
     if length != 0:
         print(f"Expected length 0, got {length} at index {i}. Ignoring length.")
-    return ("NULL", None), i
+    return (tag_name, None), i
 
 def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
     def get_human_readable_oid(oid):
@@ -178,13 +179,12 @@ def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
     (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
     oid = ".".join(map(str, value))
     human_readable_oid = get_human_readable_oid(oid)
-    if human_readable_oid == oid:
-        return (tag_name, oid), new_i
-    else:
-        return (tag_name, f"{oid} ({human_readable_oid})"), new_i
+    value = oid if human_readable_oid == oid else f"{oid} ({human_readable_oid})"
+    print(f"  Decoded value: {value}")
+    return (tag_name, value), new_i
 
 def read_constructed(data, i, pc_bit, tag_name, encoding=None):
-    print("Constructed tag")
+    print(f"{tag_name} tag")
     i += 1
     length, i = read_length(data, i)
     end_index = i + length
@@ -270,7 +270,7 @@ X509_CONTEXT_SPECIFIC_NAMES = {
 def read_context_specific(data, i, pc_bit, tag_number):
     tag_name = X509_CONTEXT_SPECIFIC_NAMES.get(tag_number, tag_number)
     tag_name = f"Context-specific ({tag_name})"
-    print(f"{tag_name}")
+    print(f"{tag_name} tag")
     i += 1
     length, i = read_length(data, i)
     end_index = i + length
@@ -286,7 +286,7 @@ def read_context_specific(data, i, pc_bit, tag_number):
             i = new_i
         return (tag_name, items), i
     else:  # Primitive
-        print_data(f"{tag_name} value", data, i, length)
+        print_data(f"  Value:", data, i, length)
         return (tag_name, data[i:end_index]), end_index
 
 # Main parsing functions
@@ -308,16 +308,23 @@ def read_element(data, i):
     elif class_bits == 3:  # Private
         return read_generic(data, i, pc_bit, f"Private ({tag_number})")
 
-def parse_asn1(data):
-    print_data("Initial data", data, 0, 16)
+def parse_elements(data, i, end_index=None):
+    if not end_index:
+        end_index = len(data)
+    if end_index > len(data):
+        print(f"\nReached end of data while reading ASN.1 elements at index {i}. Returning available data.")
+        end_index = len(data)
     items = []
-    i = 0
-    while i < len(data):
+    while i < end_index:
         item, new_i = read_element(data, i)
         if item:
             items.append(item)
         i = new_i
     return items
+
+def parse_asn1(data):
+    print_data("Initial data", data, 0, 16)
+    return parse_elements(data, 0)
 
 # Print result
 
