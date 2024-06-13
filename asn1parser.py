@@ -120,7 +120,11 @@ def read_length(data, i):
 
 # Universal tag readers
 
+RECURSIVE_OCTET_STRING = False
+
 def read_generic(data, i, pc_bit, tag_name, encoding=None):
+    global RECURSIVE_OCTET_STRING
+
     print(f"{tag_name} tag")
     i += 1
     length, i = read_length(data, i)
@@ -142,7 +146,12 @@ def read_generic(data, i, pc_bit, tag_name, encoding=None):
             return (tag_name, decoded_value), end_index
         except UnicodeDecodeError as e:
             print(f"Invalid {tag_name} string at index {end_index}. Returning as OctetString. Error was: {e}")
-    return (tag_name, value), end_index
+    if RECURSIVE_OCTET_STRING:
+        print(f"Attempting to parse {tag_name} value as ASN.1:")
+        nested_items = parse_elements(data, i, end_index)
+        return (tag_name, nested_items), end_index
+    else:
+        return (tag_name, value), end_index
 
 def read_boolean(data, i, pc_bit, tag_name, encoding=None):
     (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
@@ -343,11 +352,14 @@ def print_asn1_structure(items, indent=0):
 # Main script
 
 def main():
+    global RECURSIVE_OCTET_STRING
+
     parser = argparse.ArgumentParser(description='Parse ASN.1 file or content and optionally base64 decode the content.')
     parser.add_argument('-f', '--file_path', type=str, help='Path to the ASN.1 file.')
     parser.add_argument('-c', '--content', type=str, help='ASN.1 content directly as a string.')
     parser.add_argument('-b', '--base64', action='store_true', help='Base64 decode the content.')
     parser.add_argument('-s', '--strip-headers', action='store_true', help='Remove headers and footers like -----BEGIN CERTIFICATE-----.')
+    parser.add_argument('-r', '--recursive_octet_string', action='store_true', help='Recursively parse OCTET STRING content as ASN.1.')
 
     args = parser.parse_args()
 
@@ -364,6 +376,8 @@ def main():
         file_content = re.sub(b"\s+", b"", file_content)
 
     decoded_data = base64.b64decode(file_content) if args.base64 else file_content
+
+    RECURSIVE_OCTET_STRING = args.recursive_octet_string
 
     # Parse the ASN.1 structure
     asn1_items = parse_asn1(decoded_data)

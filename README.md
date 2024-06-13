@@ -16,6 +16,7 @@ This Python script decodes (possibly broken) ASN.1 (Abstract Syntax Notation One
 - `-c`, `--content`: ASN.1 content directly as a string.
 - `-b`, `--base64`: Base64 decode the content before parsing.
 - `-s`, `--strip-headers`: Remove headers and footers like -----BEGIN CERTIFICATE-----.
+- `-r`, `--recursive_octet_string`: Recursively parse `OCTET STRING` content as ASN.1.
 
 ### Examples
 
