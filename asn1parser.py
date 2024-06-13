@@ -79,213 +79,211 @@ OID_REPLACEMENTS = {
     '85': '2.5',
 }
 
-def parse_asn1(data):
-    def print_data(description, data, index, length=None):
-        hex_chunk = ' '.join(f'{b:02x}' for b in data[index:index + (length or 1)])
-        ascii_chunk = ''.join(chr(b) if 32 <= b <= 127 else '.' for b in data[index:index + (length or 1)])
-        print(f"{description} at index {index}: [0x] {hex_chunk} ({ascii_chunk})")
+def print_data(description, data, index, length=None):
+    hex_chunk = ' '.join(f'{b:02x}' for b in data[index:index + (length or 1)])
+    ascii_chunk = ''.join(chr(b) if 32 <= b <= 127 else '.' for b in data[index:index + (length or 1)])
+    print(f"{description} at index {index}: [0x] {hex_chunk} ({ascii_chunk})")
 
-    def print_tag(tag, tag_number, class_bits, pc_bit, index):
-        class_str = ["Universal", "Application", "Context-specific", "Private"][class_bits]
-        form_str = ["Primitive", "Constructed"][pc_bit]
-        tag_info = UNIVERSAL_TAGS.get(tag_number, ("Unknown", f"Unknown ({tag_number})"))
+def print_tag(tag, tag_number, class_bits, pc_bit, index):
+    class_str = ["Universal", "Application", "Context-specific", "Private"][class_bits]
+    form_str = ["Primitive", "Constructed"][pc_bit]
+    tag_info = UNIVERSAL_TAGS.get(tag_number, ("Unknown", f"Unknown ({tag_number})"))
+    tag_name = tag_info[1]
+    print(f"\nTag 0x{tag:02x} ({tag_name}) at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
+
+def read_length(data, i):
+    if i >= len(data):
+        print(f"\nReached end of data while reading length at index {i}.")
+        return 0, i + 1
+    length = data[i]
+    print_data("Length byte", data, i)
+    i += 1
+    if length & 0x80:  # Long form
+        num_bytes = length & 0x7F
+        length = 0
+        if i + num_bytes > len(data):
+            print(f"\nReached end of data while reading long form length at index {i}.")
+            return 0, i + num_bytes
+        print_data(f"  Long form length ({num_bytes} bytes)", data, i, num_bytes)
+        for _ in range(num_bytes):
+            length = (length << 8) | data[i]
+            i += 1
+    print(f"  Length: {length}")
+    return length, i
+
+def read_generic(data, i, pc_bit, tag_name, encoding=None):
+    print(f"{tag_name} tag")
+    i += 1
+    length, i = read_length(data, i)
+    end_index = i + length
+    if end_index > len(data):
+        print(f"\nReached end of data while reading {tag_name} tag value at index {i}. Returning available data.")
+        end_index = len(data)
+    print_data(f"{tag_name} value", data, i, length)
+    value = data[i:end_index]
+    i += length
+    if pc_bit:
+        print(f"Parsing {tag_name} value as ASN.1:")
+        nested_items = parse_asn1(value)
+        return (tag_name, nested_items), i
+    if encoding:
+        try:
+            decoded_value = value.decode(encoding)
+            return (tag_name, decoded_value), i
+        except UnicodeDecodeError as e:
+            print(f"Invalid {tag_name} string at index {i}. Returning as OctetString: {e}")
+    return (tag_name, value), i
+
+def read_boolean(data, i, pc_bit, tag_name, encoding=None):
+    (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
+    value = value[0] != 0 if value else None
+    return (tag_name, value), new_i
+
+def read_integer(data, i, pc_bit, tag_name, encoding=None):
+    (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
+    value = int.from_bytes(value, byteorder='big', signed=True) if value else None
+    return (tag_name, value), new_i
+
+def read_null(data, i, pc_bit, tag_name, encoding=None):
+    print("NULL tag")
+    i += 1
+    length, i = read_length(data, i)
+    if length != 0:
+        print(f"Expected length 0, got {length} at index {i}. Ignoring length")
+    return ("NULL", None), i
+
+def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
+    def get_human_readable_oid(oid):
+        if oid in OID_NAMES:
+            return OID_NAMES[oid]
+
+        parts = oid.split('.')
+        while len(parts) > 0:
+            prefix = '.'.join(parts)
+            if prefix in OID_REPLACEMENTS:
+                replacement = OID_REPLACEMENTS[prefix]
+                new_oid = oid.replace(prefix, replacement, 1)
+                return get_human_readable_oid(new_oid)
+            parts.pop()
+
+        return oid  # Return original OID if no human-readable name is found
+
+    (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
+    oid = ".".join(map(str, value))
+    human_readable_oid = get_human_readable_oid(oid)
+    if human_readable_oid == oid:
+        return (tag_name, oid), new_i
+    else:
+        return (tag_name, f"{oid} ({human_readable_oid})"), new_i
+
+def read_constructed(data, i, pc_bit, tag_name, encoding=None):
+    print("Constructed tag")
+    i += 1
+    length, i = read_length(data, i)
+    end_index = i + length
+    if end_index > len(data):
+        print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
+        end_index = len(data)
+    items = []
+    while i < end_index:
+        item, new_i = parse_element(data, i)
+        if item:
+            items.append(item)
+        i = new_i
+    return (tag_name, items), i
+
+UNIVERSAL_TAGS = {
+    0x01: (read_boolean, "Boolean"),  # BOOLEAN
+    0x02: (read_integer, "Integer"),  # INTEGER
+    0x03: (read_generic, "BitString"),  # BIT STRING
+    0x04: (read_generic, "OctetString"),  # OCTET STRING
+    0x05: (read_null, "NULL"),  # NULL
+    0x06: (read_object_identifier, "ObjectIdentifier"),  # OBJECT IDENTIFIER
+    0x07: (read_constructed, "ObjectDescriptor"),  # ObjectDescriptor
+    0x08: (read_constructed, "External"),  # EXTERNAL
+    0x09: (read_constructed, "Real"),  # REAL
+    0x0A: (read_integer, "Enumerated"),  # ENUMERATED
+    0x0B: (read_constructed, "EmbeddedPDV"),  # EMBEDDED PDV
+    0x0C: (read_generic, "UTF8String", 'utf-8'),  # UTF8String
+    0x10: (read_constructed, "Sequence"),  # SEQUENCE and SEQUENCE OF
+    0x11: (read_constructed, "Set"),  # SET and SET OF
+    0x12: (read_generic, "NumericString", 'ascii'),  # NumericString
+    0x13: (read_generic, "PrintableString", 'ascii'),  # PrintableString
+    0x14: (read_generic, "T61String", 'ascii'),  # T61String
+    0x15: (read_generic, "VideotexString", 'ascii'),  # VideotexString
+    0x16: (read_generic, "IA5String", 'ascii'),  # IA5String
+    0x17: (read_generic, "UTCTime", 'ascii'),  # UTCTime
+    0x18: (read_generic, "GeneralizedTime", 'ascii'),  # GeneralizedTime
+    0x19: (read_generic, "GraphicString", 'ascii'),  # GraphicString
+    0x1A: (read_generic, "VisibleString", 'ascii'),  # VisibleString
+    0x1B: (read_generic, "GeneralString", 'ascii'),  # GeneralString
+    0x1C: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
+    0x1D: (read_generic, "CharacterString", 'ascii'),  # CHARACTER STRING
+    0x1E: (read_generic, "BMPString", 'utf-16-be'),  # BMPString
+    0x1F: (read_constructed, "Date"),  # DATE
+    0x20: (read_constructed, "TimeOfDay"),  # TIME-OF-DAY
+    0x21: (read_constructed, "DateTime"),  # DATE-TIME
+    0x22: (read_constructed, "Duration"),  # DURATION
+    0x23: (read_generic, "TeletexString", 'ascii'),  # TeletexString
+    0x24: (read_generic, "VideotexString", 'ascii'),  # VideotexString
+    0x25: (read_generic, "GraphicString", 'ascii'),  # GraphicString
+    0x26: (read_generic, "VisibleString", 'ascii'),  # VisibleString
+    0x27: (read_generic, "GeneralString", 'ascii'),  # GeneralString
+    0x28: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
+    0x29: (read_constructed, "CharacterString"),  # CHARACTER STRING
+    0x2A: (read_constructed, "RelativeOID"),  # RELATIVE-OID
+}
+
+def parse_universal(tag_number, pc_bit, data, i):
+    if tag_number in UNIVERSAL_TAGS:
+        tag_info = UNIVERSAL_TAGS[tag_number]
+        read_function = tag_info[0]
         tag_name = tag_info[1]
-        print(f"\nTag 0x{tag:02x} ({tag_name}) at index {index} [class = {class_str} ({class_bits}), form = {form_str} ({pc_bit}), tag number = {tag_number}]: ", end="")
+        encoding = tag_info[2] if len(tag_info) > 2 else None
+        return read_function(data, i, pc_bit, tag_name, encoding)
+    else:
+        # Handle unknown tag numbers
+        print(f"Unknown universal tag number: 0x{tag_number:02x} at index {i}. Reading as generic")
+        return read_generic(data, i, pc_bit, f"Unknown ({tag_number})")
 
-    def parse_element(data, i):
-        tag = data[i]
-        class_bits = (tag >> 6) & 0x03
-        pc_bit = (tag >> 5) & 0x01
-        tag_number = tag & 0x1F
-
-        print_tag(tag, tag_number, class_bits, pc_bit, i)
-
-        if class_bits == 0:  # Universal
-            return parse_universal(tag_number, pc_bit, data, i)
-        elif class_bits == 1:  # Application
-            return read_generic(data, i, f"Application ({tag_number})")
-        elif class_bits == 2:  # Context-specific
-            return parse_context_specific(tag_number, pc_bit, data, i)
-        elif class_bits == 3:  # Private
-            return read_generic(data, i, f"Private ({tag_number})")
-
-    def parse_universal(tag_number, pc_bit, data, i):
-        if tag_number in UNIVERSAL_TAGS:
-            tag_info = UNIVERSAL_TAGS[tag_number]
-            read_function = tag_info[0]
-            tag_name = tag_info[1]
-            encoding = tag_info[2] if len(tag_info) > 2 else None
-            return read_function(data, i, pc_bit, tag_name, encoding)
-        else:
-            # Handle unknown tag numbers
-            print(f"Unknown universal tag number: 0x{tag_number:02x} at index {i}. Reading as generic")
-            return read_generic(data, i, pc_bit, f"Unknown ({tag_number})")
-
-    def read_length(data, i):
-        if i >= len(data):
-            print(f"\nReached end of data while reading length at index {i}.")
-            return 0, i + 1
-        length = data[i]
-        print_data("Length byte", data, i)
-        i += 1
-        if length & 0x80:  # Long form
-            num_bytes = length & 0x7F
-            length = 0
-            if i + num_bytes > len(data):
-                print(f"\nReached end of data while reading long form length at index {i}.")
-                return 0, i + num_bytes
-            print_data(f"  Long form length ({num_bytes} bytes)", data, i, num_bytes)
-            for _ in range(num_bytes):
-                length = (length << 8) | data[i]
-                i += 1
-        print(f"  Length: {length}")
-        return length, i
-
-    def read_generic(data, i, pc_bit, tag_name, encoding=None):
-        print(f"{tag_name} tag")
-        i += 1
-        length, i = read_length(data, i)
-        end_index = i + length
-        if end_index > len(data):
-            print(f"\nReached end of data while reading {tag_name} tag value at index {i}. Returning available data.")
-            end_index = len(data)
-        print_data(f"{tag_name} value", data, i, length)
-        value = data[i:end_index]
-        i += length
-        if pc_bit:
-            print(f"Parsing {tag_name} value as ASN.1:")
-            nested_items = parse_asn1(value)
-            return (tag_name, nested_items), new_i
-        if encoding:
-            try:
-                decoded_value = value.decode(encoding)
-                return (tag_name, decoded_value), i
-            except UnicodeDecodeError as e:
-                print(f"Invalid {tag_name} string at index {i}. Returning as OctetString: {e}")
-        return (tag_name, value), i
-
-    def read_boolean(data, i, pc_bit, tag_name, encoding=None):
-        (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
-        value = value[0] != 0 if value else None
-        return (tag_name, value), new_i
-
-    def read_integer(data, i, pc_bit, tag_name, encoding=None):
-        (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
-        value = int.from_bytes(value, byteorder='big', signed=True) if value else None
-        return (tag_name, value), new_i
-
-    def read_null(data, i, pc_bit, tag_name, encoding=None):
-        print("NULL tag")
-        i += 1
-        length, i = read_length(data, i)
-        if length != 0:
-            print(f"Expected length 0, got {length} at index {i}. Ignoring length")
-        return ("NULL", None), i
-
-    def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
-        def get_human_readable_oid(oid):
-            if oid in OID_NAMES:
-                return OID_NAMES[oid]
-
-            parts = oid.split('.')
-            while len(parts) > 0:
-                prefix = '.'.join(parts)
-                if prefix in OID_REPLACEMENTS:
-                    replacement = OID_REPLACEMENTS[prefix]
-                    new_oid = oid.replace(prefix, replacement, 1)
-                    return get_human_readable_oid(new_oid)
-                parts.pop()
-
-            return oid  # Return original OID if no human-readable name is found
-
-        (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
-        oid = ".".join(map(str, value))
-        human_readable_oid = get_human_readable_oid(oid)
-        if human_readable_oid == oid:
-            return (tag_name, oid), new_i
-        else:
-            return (tag_name, f"{oid} ({human_readable_oid})"), new_i
-
-
-    def read_constructed(data, i, pc_bit, tag_name, encoding=None):
-        print("Constructed tag")
-        i += 1
-        length, i = read_length(data, i)
-        end_index = i + length
-        if end_index > len(data):
-            print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
-            end_index = len(data)
+def parse_context_specific(tag_number, pc_bit, data, i):
+    print(f"Context-specific tag {tag_number}")
+    i += 1
+    length, i = read_length(data, i)
+    end_index = i + length
+    if end_index > len(data):
+        print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
+        end_index = len(data)
+    if pc_bit:  # Constructed
         items = []
         while i < end_index:
             item, new_i = parse_element(data, i)
             if item:
                 items.append(item)
             i = new_i
-        return (tag_name, items), i
+        return (f"Context-specific ({tag_number})", items), i
+    else:  # Primitive
+        print_data(f"Context-specific ({tag_number}) value", data, i, length)
+        return (f"Context-specific ({tag_number})", data[i:end_index]), end_index
 
-    def parse_context_specific(tag_number, pc_bit, data, i):
-        print(f"Context-specific tag {tag_number}")
-        i += 1
-        length, i = read_length(data, i)
-        end_index = i + length
-        if end_index > len(data):
-            print(f"\nReached end of data while reading context-specific tag value at index {i}. Returning available data.")
-            end_index = len(data)
-        if pc_bit:  # Constructed
-            items = []
-            while i < end_index:
-                item, new_i = parse_element(data, i)
-                if item:
-                    items.append(item)
-                i = new_i
-            return (f"Context-specific ({tag_number})", items), i
-        else:  # Primitive
-            print_data(f"Context-specific ({tag_number}) value", data, i, length)
-            return (f"Context-specific ({tag_number})", data[i:end_index]), end_index
+def parse_element(data, i):
+    tag = data[i]
+    class_bits = (tag >> 6) & 0x03
+    pc_bit = (tag >> 5) & 0x01
+    tag_number = tag & 0x1F
 
-    UNIVERSAL_TAGS = {
-        0x01: (read_boolean, "Boolean"),  # BOOLEAN
-        0x02: (read_integer, "Integer"),  # INTEGER
-        0x03: (read_generic, "BitString"),  # BIT STRING
-        0x04: (read_generic, "OctetString"),  # OCTET STRING
-        0x05: (read_null, "NULL"),  # NULL
-        0x06: (read_object_identifier, "ObjectIdentifier"),  # OBJECT IDENTIFIER
-        0x07: (read_constructed, "ObjectDescriptor"),  # ObjectDescriptor
-        0x08: (read_constructed, "External"),  # EXTERNAL
-        0x09: (read_constructed, "Real"),  # REAL
-        0x0A: (read_integer, "Enumerated"),  # ENUMERATED
-        0x0B: (read_constructed, "EmbeddedPDV"),  # EMBEDDED PDV
-        0x0C: (read_generic, "UTF8String", 'utf-8'),  # UTF8String
-        0x10: (read_constructed, "Sequence"),  # SEQUENCE and SEQUENCE OF
-        0x11: (read_constructed, "Set"),  # SET and SET OF
-        0x12: (read_generic, "NumericString", 'ascii'),  # NumericString
-        0x13: (read_generic, "PrintableString", 'ascii'),  # PrintableString
-        0x14: (read_generic, "T61String", 'ascii'),  # T61String
-        0x15: (read_generic, "VideotexString", 'ascii'),  # VideotexString
-        0x16: (read_generic, "IA5String", 'ascii'),  # IA5String
-        0x17: (read_generic, "UTCTime", 'ascii'),  # UTCTime
-        0x18: (read_generic, "GeneralizedTime", 'ascii'),  # GeneralizedTime
-        0x19: (read_generic, "GraphicString", 'ascii'),  # GraphicString
-        0x1A: (read_generic, "VisibleString", 'ascii'),  # VisibleString
-        0x1B: (read_generic, "GeneralString", 'ascii'),  # GeneralString
-        0x1C: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
-        0x1D: (read_generic, "CharacterString", 'ascii'),  # CHARACTER STRING
-        0x1E: (read_generic, "BMPString", 'utf-16-be'),  # BMPString
-        0x1F: (read_constructed, "Date"),  # DATE
-        0x20: (read_constructed, "TimeOfDay"),  # TIME-OF-DAY
-        0x21: (read_constructed, "DateTime"),  # DATE-TIME
-        0x22: (read_constructed, "Duration"),  # DURATION
-        0x23: (read_generic, "TeletexString", 'ascii'),  # TeletexString
-        0x24: (read_generic, "VideotexString", 'ascii'),  # VideotexString
-        0x25: (read_generic, "GraphicString", 'ascii'),  # GraphicString
-        0x26: (read_generic, "VisibleString", 'ascii'),  # VisibleString
-        0x27: (read_generic, "GeneralString", 'ascii'),  # GeneralString
-        0x28: (read_generic, "UniversalString", 'utf-32-be'),  # UniversalString
-        0x29: (read_constructed, "CharacterString"),  # CHARACTER STRING
-        0x2A: (read_constructed, "RelativeOID"),  # RELATIVE-OID
-    }
+    print_tag(tag, tag_number, class_bits, pc_bit, i)
 
-    # Handle data
+    if class_bits == 0:  # Universal
+        return parse_universal(tag_number, pc_bit, data, i)
+    elif class_bits == 1:  # Application
+        return read_generic(data, i, pc_bit, f"Application ({tag_number})")
+    elif class_bits == 2:  # Context-specific
+        return parse_context_specific(tag_number, pc_bit, data, i)
+    elif class_bits == 3:  # Private
+        return read_generic(data, i, pc_bit, f"Private ({tag_number})")
+
+def parse_asn1(data):
     print_data("Initial data", data, 0, 16)
     items = []
     i = 0
