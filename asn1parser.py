@@ -1,6 +1,7 @@
 import argparse
 import base64
 import re
+from typing import Callable, Tuple, Any, Optional
 
 OID_NAMES = {
     '1.2.840.10040.4.1': 'DSA',
@@ -79,6 +80,9 @@ OID_REPLACEMENTS = {
     '43': '1.3',
     '85': '2.5',
 }
+
+# Define the type for the reader functions
+ReaderFunction = Callable[[bytes, int, int, str, Optional[str]], Tuple[str, Any, int]]
 
 # Printing helpers
 
@@ -199,7 +203,7 @@ def read_constructed(data, i, pc_bit, tag_name, encoding=None):
         i = new_i
     return (tag_name, items), i
 
-UNIVERSAL_TAGS = {
+UNIVERSAL_TAGS: dict[int, Tuple[ReaderFunction, str, Optional[str]]] = {
     0x01: (read_boolean, "Boolean"),
     0x02: (read_integer, "Integer"),
     0x03: (read_generic, "BitString"),
