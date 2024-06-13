@@ -1,6 +1,86 @@
 import argparse
 import base64
 
+OID_NAMES = {
+    '1.2.840.10040.4.1': 'DSA',
+    '1.2.840.10040.4.3': 'DSA with SHA-1',
+    '1.2.840.10045.2.1': 'EC Public Key',
+    '1.2.840.10045.4.1': 'ECDSA with SHA-1',
+    '1.2.840.10045.4.3.2': 'ECDSA with SHA-256',
+    '1.2.840.10045.4.3.3': 'ECDSA with SHA-384',
+    '1.2.840.10045.4.3.4': 'ECDSA with SHA-512',
+    '1.2.840.113549.1.1.1': 'RSA Encryption',
+    '1.2.840.113549.1.1.2': 'MD2 with RSA Encryption',
+    '1.2.840.113549.1.1.3': 'MD4 with RSA Encryption',
+    '1.2.840.113549.1.1.4': 'MD5 with RSA Encryption',
+    '1.2.840.113549.1.1.5': 'SHA-1 with RSA Encryption',
+    '1.2.840.113549.1.1.11': 'SHA-256 with RSA Encryption',
+    '1.2.840.113549.1.1.12': 'SHA-384 with RSA Encryption',
+    '1.2.840.113549.1.1.13': 'SHA-512 with RSA Encryption',
+    '1.2.840.113549.1.1.14': 'SHA-224 with RSA Encryption',
+    '1.2.840.113549.1.7.1': 'PKCS #7 Data',
+    '1.2.840.113549.1.7.2': 'PKCS #7 Signed Data',
+    '1.2.840.113549.1.7.3': 'PKCS #7 Enveloped Data',
+    '1.2.840.113549.1.7.4': 'PKCS #7 Signed and Enveloped Data',
+    '1.2.840.113549.1.7.5': 'PKCS #7 Digested Data',
+    '1.2.840.113549.1.7.6': 'PKCS #7 Encrypted Data',
+    '1.2.840.113549.1.9.1': 'Email Address',
+    '1.2.840.113549.1.9.2': 'Unstructured Name',
+    '1.2.840.113549.1.9.3': 'Content Type',
+    '1.2.840.113549.1.9.4': 'Message Digest',
+    '1.2.840.113549.1.9.5': 'Signing Time',
+    '1.2.840.113549.1.9.6': 'Counter Signature',
+    '1.2.840.113549.1.9.7': 'Challenge Password',
+    '1.2.840.113549.1.9.8': 'Unstructured Address',
+    '1.2.840.113549.1.9.14': 'Extension Request',
+
+    '1.3.6.1.2.1.1.1': 'System Description (sysDescr)',
+    '1.3.6.1.2.1.1.2': 'System Object ID (sysObjectID)',
+    '1.3.6.1.2.1.1.3': 'System Uptime (sysUpTime)',
+    '1.3.6.1.2.1.1.4': 'System Contact (sysContact)',
+    '1.3.6.1.2.1.1.5': 'System Name (sysName)',
+    '1.3.6.1.2.1.1.6': 'System Location (sysLocation)',
+    '1.3.6.1.2.1.1.7': 'System Services (sysServices)',
+
+    '2.5.4.3': 'Common Name (CN)',
+    '2.5.4.5': 'Serial Number',
+    '2.5.4.6': 'Country Name (C)',
+    '2.5.4.7': 'Locality Name (L)',
+    '2.5.4.8': 'State or Province Name (ST)',
+    '2.5.4.9': 'Street Address',
+    '2.5.4.10': 'Organization Name (O)',
+    '2.5.4.11': 'Organizational Unit Name (OU)',
+    '2.5.4.12': 'Title',
+    '2.5.4.13': 'Description',
+    '2.5.4.15': 'Business Category',
+    '2.5.4.17': 'Postal Code',
+    '2.5.4.42': 'Given Name',
+    '2.5.4.43': 'Initials',
+    '2.5.4.44': 'Generation Qualifier',
+    '2.5.4.45': 'Unique Identifier',
+    '2.5.4.46': 'DN Qualifier',
+    '2.5.4.65': 'Pseudonym',
+    '2.5.29.17': 'Subject Alternative Name (SAN)',
+    '2.16.840.1.113730.1.1': 'Netscape Cert Type',
+    '2.16.840.1.113730.1.2': 'Netscape Base URL',
+    '2.16.840.1.113730.1.3': 'Netscape Revocation URL',
+    '2.16.840.1.113730.1.4': 'Netscape CA Revocation URL',
+    '2.16.840.1.113730.1.7': 'Netscape Cert Renewal URL',
+    '2.16.840.1.113730.1.8': 'Netscape CA Policy URL',
+    '2.16.840.1.113730.1.12': 'Netscape SSL Server Name',
+    '2.16.840.1.113730.1.13': 'Netscape Cert Sequence',
+    '2.23.140.1.1': 'Extended Validation Certificates',
+
+    '42.134.72.134.247.13.1.1.11': 'SHA-256 with RSA Signature (SHA256 RSA SIG)',
+    '42.134.72.134.247.13.1.1.1': 'RSA Key Algorithm (RSA KEY ALG)',
+}
+
+OID_REPLACEMENTS = {
+    '42': '1.2',
+    '43': '1.3',
+    '85': '2.5',
+}
+
 def parse_asn1(data, recursive_octet_string=False):
     def print_data(description, data, index, length=None):
         hex_chunk = ' '.join(f'{b:02x}' for b in data[index:index + (length or 1)])
@@ -23,11 +103,11 @@ def parse_asn1(data, recursive_octet_string=False):
         if class_bits == 0:  # Universal
             return parse_universal(tag_number, data, i)
         elif class_bits == 1:  # Application
-            return read_generic(data, i, "Application")
+            return read_generic(data, i, "Application ({tag_number})")
         elif class_bits == 2:  # Context-specific
-            return read_generic(data, i, "Context-specific")
+            return read_generic(data, i, f"Context-specific ({tag_number})")
         elif class_bits == 3:  # Private
-            return read_generic(data, i, "Private")
+            return read_generic(data, i, "Private ({tag_number})")
 
     def parse_universal(tag_number, data, i):
         if tag_number == 0x01:  # BOOLEAN
@@ -41,7 +121,8 @@ def parse_asn1(data, recursive_octet_string=False):
         elif tag_number == 0x05:  # NULL
             return read_null(data, i)
         elif tag_number == 0x06:  # OBJECT IDENTIFIER
-            return read_generic(data, i, "ObjectIdentifier")
+            # return read_generic(data, i, "ObjectIdentifier")
+            return read_object_identifier(data, i)
         elif tag_number == 0x07:  # ObjectDescriptor
             return read_generic(data, i, "ObjectDescriptor")
         elif tag_number == 0x08:  # EXTERNAL
@@ -235,6 +316,30 @@ def parse_asn1(data, recursive_octet_string=False):
         value = data[i:i + length]
         i += length
         return ("EXTERNAL", value), i
+
+    def read_object_identifier(data, i):
+        def get_human_readable_oid(oid):
+            if oid in OID_NAMES:
+                return OID_NAMES[oid]
+
+            parts = oid.split('.')
+            while len(parts) > 0:
+                prefix = '.'.join(parts)
+                if prefix in OID_REPLACEMENTS:
+                    replacement = OID_REPLACEMENTS[prefix]
+                    new_oid = oid.replace(prefix, replacement, 1)
+                    return get_human_readable_oid(new_oid)
+                parts.pop()
+
+            return oid  # Return original OID if no human-readable name is found
+
+        (tag_name, value), new_i = read_generic(data, i, "ObjectIdentifier")
+        oid = ".".join(map(str, value))
+        human_readable_oid = get_human_readable_oid(oid)
+        if human_readable_oid == oid:
+            return (tag_name, oid), new_i
+        else:
+            return (tag_name, f"{oid} ({human_readable_oid})"), new_i
 
     # Handle data
     print_data("Initial data", data, 0, 16)
