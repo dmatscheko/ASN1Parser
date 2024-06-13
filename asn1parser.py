@@ -1,5 +1,6 @@
 import argparse
 import base64
+import re
 
 OID_NAMES = {
     '1.2.840.10040.4.1': 'DSA',
@@ -320,6 +321,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--file_path', type=str, help='Path to the ASN.1 file.')
     parser.add_argument('-c', '--content', type=str, help='ASN.1 content directly as a string.')
     parser.add_argument('-b', '--base64', action='store_true', help='Base64 decode the content.')
+    parser.add_argument('-s', '--strip-headers', action='store_true', help='Remove headers and footers like -----BEGIN CERTIFICATE-----.')
 
     args = parser.parse_args()
 
@@ -331,6 +333,13 @@ if __name__ == "__main__":
     else:
         with open(args.file_path, 'rb') as f:
             file_content = f.read()
+
+    if args.strip_headers:
+        # Remove all headers and footers like -----BEGIN CERTIFICATE-----
+        file_content = re.sub(b"-----BEGIN [^-]+-----", b"", file_content)
+        file_content = re.sub(b"-----END [^-]+-----", b"", file_content)
+        # Remove any remaining whitespace or newlines
+        file_content = re.sub(b"\s+", b"", file_content)
 
     if args.base64:
         decoded_data = base64.b64decode(file_content)
