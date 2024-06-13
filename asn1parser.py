@@ -179,7 +179,7 @@ def read_object_identifier(data, i, pc_bit, tag_name, encoding=None):
     (tag_name, value), new_i = read_generic(data, i, pc_bit, tag_name)
     oid = ".".join(map(str, value))
     human_readable_oid = get_human_readable_oid(oid)
-    value = oid if human_readable_oid == oid else f"{oid} ({human_readable_oid})"
+    value = oid if human_readable_oid == oid else f"{human_readable_oid} ({oid})"
     print(f"  Decoded value: {value}")
     return (tag_name, value), new_i
 
